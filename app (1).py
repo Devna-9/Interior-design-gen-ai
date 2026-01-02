@@ -1,6 +1,5 @@
-
 import streamlit as st
-from openai import OpenAI
+import openai
 from PIL import Image
 import requests
 from io import BytesIO
@@ -13,106 +12,97 @@ st.set_page_config(
     layout="centered"
 )
 
-client = OpenAI(api_key="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")  # <-- add your API key here
+# Use environment variable for API key
+openai.api_key = st.secrets["OPENAI_API_KEY"]
+# OR locally:
+# openai.api_key = "YOUR_API_KEY"
 
 # -------------------------------
-# BUDGET LOGIC (Feature Engineering Equivalent)
+# BUDGET LOGIC
 # -------------------------------
 def budget_description(budget):
     if budget == "Low":
-        return (
-            "low-cost materials, compact furniture, simple decor, "
-            "laminate flooring, minimal accessories"
-        )
+        return "low-cost materials, compact furniture, simple decor, laminate flooring"
     elif budget == "Medium":
-        return (
-            "mid-range materials, modular furniture, wooden finishes, "
-            "balanced decor, premium lighting"
-        )
+        return "mid-range materials, modular furniture, wooden finishes, balanced decor"
     else:
-        return (
-            "luxury materials, marble flooring, custom furniture, "
-            "designer decor, premium textures"
-        )
+        return "luxury materials, marble flooring, custom furniture, designer decor"
 
 # -------------------------------
-# PROMPT ENGINEERING (Core Logic)
+# PROMPT ENGINEERING
 # -------------------------------
 def build_prompt(room, style, color, lighting, budget_desc, furniture_style, material):
-    prompt = f"""
-    Ultra-realistic {style.lower()} {room.lower()} interior design,
-    designed for a {budget_desc}.
-    Dominant {color.lower()} color palette with realistic textures.
-    {furniture_style} furniture with accurate proportions.
-    {lighting.lower()} lighting with natural shadows and reflections.
-    Global illumination, soft ambient light.
-    Dominant use of {material.lower()} textures and finishes.
-    Shot with DSLR camera, 35mm lens, shallow depth of field.
-    Photorealistic interior design photography, 8K resolution.
-    No people, no text, no watermark.
-    """
-    return prompt
+    return f"""
+Ultra-realistic {style.lower()} {room.lower()} interior design.
+Designed with {budget_desc}.
+Dominant {color.lower()} color palette.
+{furniture_style.lower()} furniture with accurate proportions.
+{lighting.lower()} lighting with realistic shadows.
+High-quality {material.lower()} textures and finishes.
+Global illumination, DSLR photography, 35mm lens.
+Photorealistic, ultra-detailed, 8K resolution.
+No people, no text, no watermark.
+"""
 
 # -------------------------------
-# DALL·E IMAGE GENERATION
+# IMAGE GENERATION
 # -------------------------------
 def generate_image(prompt):
-    response = client.images.generate(
+    response = openai.Image.create(
         model="dall-e-3",
         prompt=prompt,
-        size="1024x1024",
-        quality="standard",
-        n=1,
+        size="1024x1024"
     )
-    return response.data[0].url
+    return response["data"][0]["url"]
 
 # -------------------------------
-# Streamlit UI
+# STREAMLIT UI
 # -------------------------------
 st.title("AI Interior Designer")
-st.write("Generate unique interior designs with DALL·E 3")
+st.write("Generate ultra-realistic interior designs using DALL·E 3")
 
-# Input fields
-room = st.selectbox("Select Room Type",
-                    ("Living Room", "Bedroom", "Kitchen",
-                     "Bathroom", "Office", "Dining Room"))
+room = st.selectbox("Room Type",
+                    ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Office", "Dining Room"])
 
-style = st.selectbox("Select Style",
-                     ("Modern", "Minimalist", "Industrial",
-                      "Bohemian", "Scandinavian", "Traditional",
-                      "Art Deco", "Rustic", "Coastal", "Mid-Century Modern"))
+style = st.selectbox("Design Style",
+                     ["Modern", "Minimalist", "Industrial", "Bohemian",
+                      "Scandinavian", "Traditional", "Art Deco", "Rustic"])
 
-color = st.selectbox("Select Dominant Color Palette",
-                     ("Neutral", "Monochromatic", "Vibrant",
-                      "Pastel", "Dark", "Earthy", "Cool", "Warm", "Metallic", "Jewel Tone", "Gradient"))
+color = st.selectbox("Color Palette",
+                     ["Neutral", "Warm", "Cool", "Earthy", "Monochrome", "Vibrant"])
 
-lighting = st.selectbox("Select Lighting Style",
-                       ("Bright", "Dim", "Natural", "Accent", "Ambient", "Track Lighting", "Recessed Lighting", "Pendant Lighting", "Chandelier", "Sconce", "Task Lighting", "Uplighting", "Downlighting"))
+lighting = st.selectbox("Lighting Style",
+                        ["Natural light", "Warm ambient", "Soft LED", "Accent lighting"])
 
-furniture_style = st.selectbox("Select Furniture Style",
-                               ("Modern", "Classic", "Rustic", "Minimalist", "Industrial", "Bohemian", "Vintage", "Transitional", "Shabby Chic", "French Provincial", "Art Deco", "Asian", "Contemporary", "Eclectic", "Farmhouse", "Hollywood Regency", "Mediterranean", "Mission", "Nautical", "Southwestern", "Tropical", "Victorian", "Art Nouveau", "Mid-Century Modern", "Neo-classical", "Regency", "Shaker"))
+furniture_style = st.selectbox("Furniture Style",
+                               ["Modern", "Classic", "Rustic", "Minimalist",
+                                "Industrial", "Vintage", "Mid-Century Modern"])
 
-material = st.selectbox("Select Dominant Material/Texture",
-                           ("Wood", "Metal", "Glass", "Concrete", "Brick", "Stone", "Leather", "Fabric", "Marble", "Ceramic", "Rattan", "Velvet", "Silk", "Linen", "Wicker", "Bamboo", "Paper", "Cork", "Felt", "Mirror", "Plastic", "Acrylic", "Chrome", "Copper", "Brass", "Gold", "Silver", "Plexiglass", "Terracotta", "Slate", "Granite"))
+material = st.selectbox("Primary Material",
+                         ["Wood", "Marble", "Glass", "Metal", "Concrete", "Fabric"])
 
-budget_options = {
-    "Low": "low-cost materials, compact furniture, simple decor",
-    "Medium": "mid-range materials, modular furniture, wooden finishes",
-    "High": "luxury materials, marble flooring, custom furniture"
-}
 budget = st.select_slider(
-    "Select Budget",
-    options=list(budget_options.keys()),
+    "Budget Level",
+    options=["Low", "Medium", "High"],
     value="Medium"
 )
 
-# Generate button
+# -------------------------------
+# GENERATE BUTTON
+# -------------------------------
 if st.button("Generate Design"):
-    with st.spinner("Generating your interior design..."):
+    with st.spinner("Designing your interior..."):
         budget_desc = budget_description(budget)
-        prompt = build_prompt(room, style, color, lighting, budget_desc, furniture_style, material)
-        image_url = generate_image(prompt)
+        prompt = build_prompt(
+            room, style, color, lighting,
+            budget_desc, furniture_style, material
+        )
 
-        st.image(image_url, caption="Your AI-Generated Interior Design", use_column_width=True)
-        st.success("Design Generated!")
-        st.write(f"**Prompt used:** {prompt}")
+        image_url = generate_image(prompt)
+        image = Image.open(BytesIO(requests.get(image_url).content))
+
+        st.image(image, caption="AI-Generated Interior Design", use_column_width=True)
+        st.success("Design generated successfully!")
+
+        st.subheader("Prompt Used")
+        st.code(prompt)
