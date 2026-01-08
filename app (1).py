@@ -13,9 +13,9 @@ st.set_page_config(
 )
 
 # Use environment variable for API key
-openai.api_key = st.secrets["dkap7gsnxqdreazd2gpura"]
+openai.api_key = st.secrets["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"]
 # OR locally:
-# openai.api_key = "dkap7gsnxqdreazd2gpura"
+# openai.api_key = "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"
 
 # -------------------------------
 # BUDGET LOGIC
