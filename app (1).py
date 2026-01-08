@@ -1,5 +1,5 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 from PIL import Image
 import requests
 from io import BytesIO
@@ -12,10 +12,12 @@ st.set_page_config(
     layout="centered"
 )
 
-# Use environment variable for API key
-openai.api_key = st.secrets["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"]
-# OR locally:
-# openai.api_key = "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"
+# SECURE KEY ACCESS: This looks for "OPENAI_API_KEY" in your secrets.toml or Streamlit Cloud settings
+try:
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+except Exception as e:
+    st.error("API Key not found. Please set OPENAI_API_KEY in your Streamlit secrets.")
+    st.stop()
 
 # -------------------------------
 # BUDGET LOGIC
@@ -48,12 +50,14 @@ No people, no text, no watermark.
 # IMAGE GENERATION
 # -------------------------------
 def generate_image(prompt):
-    response = openai.Image.create(
+    response = client.images.generate(
         model="dall-e-3",
         prompt=prompt,
-        size="1024x1024"
+        size="1024x1024",
+        quality="standard",
+        n=1,
     )
-    return response["data"][0]["url"]
+    return response.data[0].url
 
 # -------------------------------
 # STREAMLIT UI
@@ -61,25 +65,26 @@ def generate_image(prompt):
 st.title("AI Interior Designer")
 st.write("Generate ultra-realistic interior designs using DALL·E 3")
 
-room = st.selectbox("Room Type",
-                    ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Office", "Dining Room"])
+# Layout for inputs
+col1, col2 = st.columns(2)
 
-style = st.selectbox("Design Style",
-                     ["Modern", "Minimalist", "Industrial", "Bohemian",
-                      "Scandinavian", "Traditional", "Art Deco", "Rustic"])
+with col1:
+    room = st.selectbox("Room Type",
+                        ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Office", "Dining Room"])
+    style = st.selectbox("Design Style",
+                         ["Modern", "Minimalist", "Industrial", "Bohemian",
+                          "Scandinavian", "Traditional", "Art Deco", "Rustic"])
+    color = st.selectbox("Color Palette",
+                         ["Neutral", "Warm", "Cool", "Earthy", "Monochrome", "Vibrant"])
 
-color = st.selectbox("Color Palette",
-                     ["Neutral", "Warm", "Cool", "Earthy", "Monochrome", "Vibrant"])
-
-lighting = st.selectbox("Lighting Style",
-                        ["Natural light", "Warm ambient", "Soft LED", "Accent lighting"])
-
-furniture_style = st.selectbox("Furniture Style",
-                               ["Modern", "Classic", "Rustic", "Minimalist",
-                                "Industrial", "Vintage", "Mid-Century Modern"])
-
-material = st.selectbox("Primary Material",
-                         ["Wood", "Marble", "Glass", "Metal", "Concrete", "Fabric"])
+with col2:
+    lighting = st.selectbox("Lighting Style",
+                            ["Natural light", "Warm ambient", "Soft LED", "Accent lighting"])
+    furniture_style = st.selectbox("Furniture Style",
+                                   ["Modern", "Classic", "Rustic", "Minimalist",
+                                    "Industrial", "Vintage", "Mid-Century Modern"])
+    material = st.selectbox("Primary Material",
+                             ["Wood", "Marble", "Glass", "Metal", "Concrete", "Fabric"])
 
 budget = st.select_slider(
     "Budget Level",
@@ -92,17 +97,24 @@ budget = st.select_slider(
 # -------------------------------
 if st.button("Generate Design"):
     with st.spinner("Designing your interior..."):
-        budget_desc = budget_description(budget)
-        prompt = build_prompt(
-            room, style, color, lighting,
-            budget_desc, furniture_style, material
-        )
+        try:
+            budget_desc = budget_description(budget)
+            prompt = build_prompt(
+                room, style, color, lighting,
+                budget_desc, furniture_style, material
+            )
 
-        image_url = generate_image(prompt)
-        image = Image.open(BytesIO(requests.get(image_url).content))
+            image_url = generate_image(prompt)
+            
+            # Download and display image
+            response = requests.get(image_url)
+            img = Image.open(BytesIO(response.content))
 
-        st.image(image, caption="AI-Generated Interior Design", use_column_width=True)
-        st.success("Design generated successfully!")
+            st.image(img, caption="AI-Generated Interior Design", use_column_width=True)
+            st.success("Design generated successfully!")
 
-        st.subheader("Prompt Used")
-        st.code(prompt)
+            with st.expander("View Design Prompt"):
+                st.code(prompt)
+                
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
