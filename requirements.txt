@@ -1,8 +1,8 @@
 streamlit
-pandas
-numpy
+torch
+torchvision
+diffusers
+transformers
+accelerate
 scikit-learn
-openai
 pillow
-requests
-matplotlib
