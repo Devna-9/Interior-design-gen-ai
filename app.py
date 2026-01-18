@@ -15,12 +15,7 @@ st.caption("Stable Diffusion Inpainting + CLIP-based prompt accuracy")
 # ------------------ DEVICE ------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# ------------------ LOAD MODELS ------------------
-@st.cache_resource
-def load_sd_pipeline():
-    pipe = StableDiffusionInpaintPipeline.from_pretrained("runwayml/stable-diffusion-inpainting", torch_dtype=torch.float16 if device == "cuda" else torch.float32)
-    return pipe.to(device)
-
+pipe = StableDiffusionInpaintPipeline.from_pretrained( "runwayml/stable-diffusion-inpainting",torch_dtype=torch.float16 if device == "cuda" else torch.float32).to(device)
 @st.cache_resource
 def load_clip():
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
