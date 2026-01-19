@@ -1,95 +1,139 @@
 import streamlit as st
+import base64
+import io
+import os
 import torch
-import numpy as np
 from PIL import Image
-from diffusers import StableDiffusionInpaintPipeline
-from transformers import CLIPProcessor, CLIPModel
-from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer, util
 
-# ------------------ PAGE CONFIG ------------------
-st.set_page_config(  page_title="AI Interior Designer",  layout="wide")
+# --- CONFIGURATION & MODEL LOADING ---
+st.set_page_config(page_title="AI Interior Designer", layout="wide")
 
-st.title("🛋️ AI Interior Designer with Prompt Accuracy")
-st.caption("Stable Diffusion Inpainting + CLIP-based prompt accuracy")
-
-# ------------------ DEVICE ------------------
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-pipe = StableDiffusionInpaintPipeline.from_pretrained( "runwayml/stable-diffusion-inpainting",torch_dtype=torch.float16 if device == "cuda" else torch.float32).to(device)
 @st.cache_resource
-def load_clip():
-    clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
-    clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-    return clip_model, clip_processor
+def load_models():
+    # Loading the same model as your Dash app
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    return model
 
-pipe = load_sd_pipeline()
-clip_model, clip_processor = load_clip()
+text_embedding_model = load_models()
 
-# ------------------ SIDEBAR ------------------
-st.sidebar.header("🧩 Controls")
+# --- MOCK FUNCTIONS (Replace these with your actual generation logic) ---
+def build_prompt(room, style, color, lighting, furniture, material):
+    return f"A {style} {room} with {color} palette, {lighting} lighting, {furniture} furniture, made of {material}."
 
-guidance_scale = st.sidebar.slider("Guidance Scale", 5, 20, 15)
-num_images = st.sidebar.slider("Number of Images", 1, 6, 4)
-seed = st.sidebar.number_input("Seed (change for variety)", value=0, step=1)
+def generate_design(room, style, color, lighting, furniture, material):
+    # This is a placeholder. Replace with your actual model inference code.
+    return Image.new('RGB', (800, 600), color=(100, 150, 200))
 
-# ------------------ IMAGE INPUT ------------------
-col1, col2 = st.columns(2)
+def calculate_consistency_score(image, prompt):
+    # Placeholder for your consistency logic
+    return 0.8524
 
-with col1:
-    st.subheader("Upload Original Image")
-    init_image_file = st.file_uploader("Image", type=["jpg", "png"])
+# --- SESSION STATE INITIALIZATION ---
+if 'interesting_images' not in st.session_state:
+    st.session_state.interesting_images = []
+if 'last_generated_img' not in st.session_state:
+    st.session_state.last_generated_img = None
+if 'last_prompt' not in st.session_state:
+    st.session_state.last_prompt = ""
 
-with col2:
-    st.subheader("Upload Mask (white = change)")
-    mask_image_file = st.file_uploader("Mask", type=["png"])
+# --- UI LAYOUT ---
+st.title("🏠 AI Interior Designer")
 
-if not init_image_file or not mask_image_file:
-    st.warning("Upload both image and mask to proceed.")
-    st.stop()
+tab1, tab2 = st.tabs(["Design Parameters", "Refine & Analyze"])
 
-init_image = Image.open(init_image_file).convert("RGB")
-mask_image = Image.open(mask_image_file).convert("RGB")
+with tab1:
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("Configure Design")
+        room = st.selectbox("Room Type", ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Office"])
+        style = st.selectbox("Design Style", ["Modern", "Minimalist", "Industrial", "Bohemian", "Scandinavian"])
+        color = st.selectbox("Color Palette", ["Neutral", "Warm", "Cool", "Earthy", "Monochrome"])
+        lighting = st.selectbox("Lighting", ["Natural light", "Warm ambient", "Soft LED"])
+        furniture = st.selectbox("Furniture", ["Modern", "Classic", "Vintage", "Mid-Century"])
+        material = st.selectbox("Primary Material", ["Wood", "Marble", "Glass", "Metal", "Concrete"])
+        
+        if st.button("Generate Design", use_container_width=True):
+            with st.spinner("Generating your dream room..."):
+                img = generate_design(room, style, color, lighting, furniture, material)
+                prompt = build_prompt(room, style, color, lighting, furniture, material)
+                
+                st.session_state.last_generated_img = img
+                st.session_state.last_prompt = prompt
+                st.success("Design Generated! Switch to 'Refine & Analyze' tab.")
 
-st.subheader("Original & Mask")
-st.image([init_image, mask_image], caption=["Original", "Mask"], width=350)
+with tab2:
+    col_img, col_search = st.columns(2)
+    
+    with col_img:
+        st.subheader("Generated Design")
+        if st.session_state.last_generated_img:
+            st.image(st.session_state.last_generated_img, use_container_width=True)
+            
+            score = calculate_consistency_score(st.session_state.last_generated_img, st.session_state.last_prompt)
+            st.info(f"**Prompt-Image Consistency Score:** {score:.4f}")
+            
+            if st.button("Mark as Interesting", use_container_width=True):
+                # Calculate embedding for storage
+                embedding = text_embedding_model.encode(st.session_state.last_prompt, convert_to_tensor=True)
+                
+                new_entry = {
+                    "image": st.session_state.last_generated_img,
+                    "prompt": st.session_state.last_prompt,
+                    "score": score,
+                    "embedding": embedding
+                }
+                
+                # Avoid duplicates
+                if not any(d['prompt'] == st.session_state.last_prompt for d in st.session_state.interesting_images):
+                    st.session_state.interesting_images.append(new_entry)
+                    st.toast("Saved to Interesting Designs!")
+                else:
+                    st.warning("Already saved!")
+        else:
+            st.write("No design generated yet. Use the first tab to start.")
 
-# ------------------ PROMPT INPUT ------------------
-st.subheader("✏️ Prompt for Interior Change")
-prompt = st.text_input("Describe what you want to change", placeholder="white calacatta marble kitchen island and wall")
+    with col_search:
+        st.subheader("Similarity Search")
+        search_query = st.text_input("Search for similar designs", placeholder="e.g., modern bedroom with wood")
+        
+        if st.button("Search") and st.session_state.interesting_images:
+            query_embedding = text_embedding_model.encode(search_query, convert_to_tensor=True)
+            
+            similarities = []
+            for item in st.session_state.interesting_images:
+                sim = util.cos_sim(query_embedding, item['embedding']).item()
+                similarities.append((sim, item))
+            
+            # Sort by similarity
+            similarities.sort(key=lambda x: x[0], reverse=True)
+            
+            for score, item in similarities[:3]:
+                with st.expander(f"Match (Score: {score:.4f})"):
+                    st.image(item['image'])
+                    st.caption(item['prompt'])
+        elif not st.session_state.interesting_images:
+            st.write("Save some 'Interesting' designs first to search through them.")
 
-generate_btn = st.button("🎨 Generate Design")
+# --- GALLERY SECTION ---
+st.divider()
+st.header("🌟 Interesting Designs Gallery")
 
-# ------------------ GENERATION ------------------
-if generate_btn and prompt.strip():
-    generator = torch.Generator(device=device).manual_seed(seed)
+if st.session_state.interesting_images:
+    # Dropdown to select specific image
+    options = [f"Design {i+1}: {img['prompt'][:50]}..." for i, img in enumerate(st.session_state.interesting_images)]
+    selected_idx = st.selectbox("Select a design to view in detail", range(len(options)), format_func=lambda x: options[x])
+    
+    if selected_idx is not None:
+        selected_item = st.session_state.interesting_images[selected_idx]
+        st.image(selected_item['image'], caption=selected_item['prompt'], width=700)
 
-    with st.spinner("Generating interior designs..."):
-        images = pipe(     prompt=prompt,   image=init_image,   mask_image=mask_image,   guidance_scale=guidance_scale,   num_images_per_prompt=num_images,   generator=generator        ).images
-
-    # ------------------ CLIP ACCURACY ------------------
-    def clip_score(image, text):
-        inputs = clip_processor(text=[text], images=image, return_tensors="pt", padding=True  ).to(device)
-
-        with torch.no_grad():
-            outputs = clip_model(**inputs)
-
-        image_emb = outputs.image_embeds.cpu().numpy()
-        text_emb = outputs.text_embeds.cpu().numpy()
-        return cosine_similarity(image_emb, text_emb)[0][0]
-
-    scores = [clip_score(img, prompt) for img in images]
-
-    # ------------------ DISPLAY ------------------
-    st.subheader("🖼️ Generated Designs")
-
-    selected_idx = st.selectbox("Select Image", options=list(range(len(images))),  format_func=lambda i: f"Design {i+1} | Accuracy: {scores[i]:.3f}")
-
-    st.image(images[selected_idx], width=600)
-
-    st.markdown("### 📊 Prompt–Image Accuracy")
-    st.success(f"CLIP Similarity Score: **{scores[selected_idx]:.3f}**")
-
-    st.caption("Higher score means the generated image aligns better with your prompt. " "This is CLIP-based semantic similarity, not pixel matching.")
-
+    # Grid Display
+    cols = st.columns(4)
+    for idx, item in enumerate(st.session_state.interesting_images):
+        with cols[idx % 4]:
+            st.image(item['image'], use_container_width=True)
+            st.caption(f"Score: {item['score']:.2f}")
 else:
-    st.info("Enter a prompt and click Generate.")
+    st.info("Your gallery is currently empty.")
