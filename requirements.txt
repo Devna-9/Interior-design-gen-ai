@@ -1,8 +1,4 @@
 streamlit
+sentence-transformers
 torch
-torchvision
-diffusers
-transformers
-accelerate
-scikit-learn
-pillow
+Pillow
